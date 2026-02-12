@@ -42,3 +42,14 @@ export const login = async (req, res) => {
     handleAuthError(error, res);
   }
 };
+
+export const getCurrentUser = (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  return res.status(200).json({
+    id: req.user.sub,
+    email: req.user.email
+  });
+};
