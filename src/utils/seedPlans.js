@@ -5,17 +5,17 @@ const PLAN_MODELS = [
   {
     model: '3-Step',
     targets: [8, 6, 4],
-    consistency_limit: 40,
+    consistency_limit_percent: 40,
   },
   {
     model: '2-Step',
     targets: [8, 5],
-    consistency_limit: 25,
+    consistency_limit_percent: 25,
   },
   {
     model: '1-Step',
     targets: [10],
-    consistency_limit: 15,
+    consistency_limit_percent: 15,
   },
 ];
 
@@ -28,13 +28,13 @@ const getProfitSplit = (accountSize) => {
 };
 
 const buildPlans = () =>
-  PLAN_MODELS.flatMap(({ model, targets, consistency_limit }) =>
+  PLAN_MODELS.flatMap(({ model, targets, consistency_limit_percent }) =>
     ACCOUNT_SIZES.map((account_size) => ({
       id: randomUUID(),
       model,
       account_size,
       targets,
-      consistency_limit,
+      consistency_limit_percent,
       profit_split: getProfitSplit(account_size),
     })),
   );
