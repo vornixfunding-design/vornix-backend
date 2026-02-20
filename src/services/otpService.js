@@ -1,52 +1,42 @@
 import supabase from '../config/supabase.js';
+import { sendEmail } from '../utils/email.js';
 
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+const OTP_TABLE = 'otps';
 
-export async function sendOtpToEmail(email) {
-  const otp = generateOTP();
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+export async function generateAndSendOtp(email) {
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  const { error } = await supabase
-    .from('otp_codes')
-    .insert({
-      email,
-      otp,
-      expires_at: expiresAt,
-    });
+  await supabase.from(OTP_TABLE).delete().eq('email', email);
 
-  if (error) {
-    throw new Error('Failed to store OTP');
-  }
+  await supabase.from(OTP_TABLE).insert({
+    email,
+    otp,
+    created_at: new Date().toISOString(),
+  });
 
-  console.log('OTP for', email, '=', otp); // TEMP (remove when using real email)
+  const html = `
+      <div style="font-family:Arial;padding:20px;background:#0f172a;color:white;border-radius:10px">
+        <h2 style="color:#38bdf8">VORNIX OTP Verification</h2>
+        <p>Your OTP is:</p>
+        <h1 style="font-size:32px;letter-spacing:4px">${otp}</h1>
+        <p>This OTP is valid for 5 minutes.</p>
+      </div>
+    `;
 
-  return true;
+  await sendEmail(email, "Your Vornix OTP", html);
+
+  return { otpSent: true };
 }
 
 export async function verifyOtp(email, otp) {
-  const { data, error } = await supabase
-    .from('otp_codes')
+  const { data } = await supabase
+    .from(OTP_TABLE)
     .select('*')
     .eq('email', email)
     .eq('otp', otp)
-    .eq('verified', false)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    throw new Error('Invalid OTP');
-  }
+  if (!data) return { valid: false };
 
-  const now = new Date();
-  if (now > new Date(data.expires_at)) {
-    throw new Error('OTP expired');
-  }
-
-  await supabase
-    .from('otp_codes')
-    .update({ verified: true })
-    .eq('id', data.id);
-
-  return true;
+  return { valid: true };
 }
