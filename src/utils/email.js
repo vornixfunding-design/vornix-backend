@@ -1,21 +1,19 @@
-import { Resend } from 'resend';
+import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function sendEmail(to, subject, html) {
+export async function sendOTP(to, otp) {
   try {
-    const from = process.env.RESEND_FROM_EMAIL;
-
-    const result = await resend.emails.send({
-      from,
+    await resend.emails.send({
+      from: "Vornix <no-reply@vornixfunding.com>",
       to,
-      subject,
-      html,
+      subject: "Your Vornix OTP Code",
+      html: `<p>Your OTP is: <strong>${otp}</strong>. It expires in 5 minutes.</p>`
     });
 
-    return { success: true, result };
+    return { success: true };
   } catch (error) {
-    console.error("Email error:", error);
+    console.error("Email send error:", error);
     return { success: false, error };
   }
 }
