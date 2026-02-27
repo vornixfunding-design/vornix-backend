@@ -1,16 +1,21 @@
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
-export const mailer = nodemailer.createTransport({
-  service: 'gmail',
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.OTP_EMAIL,
-    pass: process.env.OTP_EMAIL_APP_PASSWORD,
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
-export async function sendEmail(to, subject, html) {
-  await mailer.sendMail({
-    from: `"Vornix Funding" <${process.env.OTP_EMAIL}>`,
+export async function sendEmail({ to, subject, html }) {
+  return transporter.sendMail({
+    from: `"Vornix Funding" <${process.env.GMAIL_USER}>`,
     to,
     subject,
     html,

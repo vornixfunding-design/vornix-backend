@@ -13,11 +13,11 @@ export async function generateOTP(email) {
 
   if (error) throw error;
 
-  await sendEmail(
-    email,
-    'Your Vornix OTP Code',
-    `<h2>Your OTP: ${otp}</h2><p>This code expires in 5 minutes.</p>`
-  );
+  await sendEmail({
+    to: email,
+    subject: 'Your Vornix OTP Code',
+    html: `<h2>Your OTP: ${otp}</h2><p>This code expires in 5 minutes.</p>`,
+  });
 
   return true;
 }
