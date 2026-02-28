@@ -1,101 +1,191 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import supabase from "../config/supabase.js";
-import { generateAndSendOTP, verifyOTP } from "../services/otpService.js";
+import { generateOTP, verifyOTP } from "../services/otpService.js";
 
 const USERS_TABLE = "users";
-const SALT = 10;
+const SALT_ROUNDS = 10;
 
-const signToken = (id, email) =>
-  jwt.sign({ sub: id, email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 
-export const sendOtpController = async (req, res) => {
+const signToken = (userId, email) =>
+  jwt.sign({ sub: userId, email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+export async function register(req, res) {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
 
-    if (!email) return res.status(400).json({ error: "Email required" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
 
-    await generateAndSendOTP(email);
-    return res.json({ success: true, message: "OTP sent" });
-  } catch (err) {
-    return res.status(500).json({ error: "OTP failed", details: err.message });
-  }
-};
-
-export const registerController = async (req, res) => {
-  try {
-    const { email, password, otp } = req.body;
-
-    if (!email || !password || !otp)
-      return res.status(400).json({ error: "Missing fields" });
-
-    const valid = await verifyOTP(email, otp);
-    if (!valid) return res.status(400).json({ error: "Invalid OTP" });
-
-    const { data: existing } = await supabase
+    const { data: existingUser, error: existingError } = await supabase
       .from(USERS_TABLE)
       .select("id")
-      .eq("email", email.toLowerCase())
+      .eq("email", email)
       .maybeSingle();
 
-    if (existing) return res.status(409).json({ error: "User exists" });
+    if (existingError) {
+      return res.status(500).json({ error: "Failed to check existing user" });
+    }
 
-    const password_hash = await bcrypt.hash(password, SALT);
+    if (existingUser) {
+      return res.status(409).json({ error: "User already exists" });
+    }
 
-    const { data: user } = await supabase
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const { data: user, error: createError } = await supabase
       .from(USERS_TABLE)
-      .insert({ email: email.toLowerCase(), password_hash })
+      .insert({ email, password_hash: passwordHash })
       .select("id, email")
       .single();
 
-    const token = signToken(user.id, user.email);
+    if (createError || !user) {
+      return res.status(500).json({ error: "Failed to create user" });
+    }
 
-    return res.json({ user, token });
-  } catch (err) {
-    return res.status(500).json({ error: "Registration error", details: err.message });
+    await generateOTP(email);
+
+    return res.status(201).json({
+      message: "User registered. OTP sent to email.",
+      user,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Register failed" });
   }
-};
+}
 
-export const loginController = async (req, res) => {
+export async function verify(req, res) {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || "").trim();
 
-    const { data: user } = await supabase
+    if (!email || !otp) {
+      return res.status(400).json({ error: "email and otp are required" });
+    }
+
+    const isValid = await verifyOTP(email, otp);
+
+    if (!isValid) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    return res.status(200).json({ success: true, message: "OTP verified" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "OTP verification failed" });
+  }
+}
+
+export async function login(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+
+    const { data: user, error: fetchError } = await supabase
       .from(USERS_TABLE)
       .select("id, email, password_hash")
-      .eq("email", email.toLowerCase())
+      .eq("email", email)
       .maybeSingle();
 
-    if (!user) return res.status(401).json({ error: "Invalid email or pass" });
+    if (fetchError || !user) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: "Invalid email or pass" });
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
     const token = signToken(user.id, user.email);
-    return res.json({ user: { id: user.id, email: user.email }, token });
-  } catch (err) {
-    return res.status(500).json({ error: "Login failed", details: err.message });
+
+    return res.status(200).json({ token, user: { id: user.id, email: user.email } });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Login failed" });
   }
-};
+}
 
-export const forgotPasswordController = async (req, res) => {
-  const { email } = req.body;
-  await generateAndSendOTP(email);
-  return res.json({ success: true, message: "OTP sent for password reset" });
-};
+export async function sendOtp(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
 
-export const resetPasswordController = async (req, res) => {
-  const { email, otp, newPassword } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "email is required" });
+    }
 
-  const valid = await verifyOTP(email, otp);
-  if (!valid) return res.status(400).json({ error: "Invalid OTP" });
+    await generateOTP(email);
 
-  const password_hash = await bcrypt.hash(newPassword, SALT);
+    return res.status(200).json({ success: true, message: "OTP sent" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to send OTP" });
+  }
+}
 
-  await supabase
-    .from(USERS_TABLE)
-    .update({ password_hash })
-    .eq("email", email.toLowerCase());
+export async function forgotPassword(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
 
-  return res.json({ success: true, message: "Password reset successful" });
-};
+    if (!email) {
+      return res.status(400).json({ error: "email is required" });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from(USERS_TABLE)
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (userError) {
+      return res.status(500).json({ error: "Failed to check user" });
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await generateOTP(email);
+
+    return res.status(200).json({ success: true, message: "Password reset OTP sent" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to send reset OTP" });
+  }
+}
+
+export async function resetPassword(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || "").trim();
+    const newPassword = String(req.body.newPassword || "");
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: "email, otp and newPassword are required" });
+    }
+
+    const isValid = await verifyOTP(email, otp);
+
+    if (!isValid) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    const { error: updateError } = await supabase
+      .from(USERS_TABLE)
+      .update({ password_hash: passwordHash })
+      .eq("email", email);
+
+    if (updateError) {
+      return res.status(500).json({ error: "Failed to update password" });
+    }
+
+    return res.status(200).json({ success: true, message: "Password reset successful" });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Reset password failed" });
+  }
+}

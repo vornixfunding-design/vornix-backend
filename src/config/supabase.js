@@ -1,7 +1,8 @@
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+dotenv.config();
 
-// Backend MUST use service role key to allow inserts/updates
-export const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+export default supabase;
