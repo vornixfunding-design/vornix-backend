@@ -1,5 +1,5 @@
 import supabase from "../config/supabase.js";
-import { transporter } from "../utils/email.js";
+import { sendEmail } from "../utils/email.js";
 
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -25,8 +25,14 @@ export async function generateOTP(email) {
     throw new Error(`Failed to store OTP: ${insertError.message}`);
   }
 
-  await transporter.sendMail({
-    from: process.env.OTP_FROM_EMAIL,
+  const fromEmail =
+    process.env.OTP_FROM_EMAIL ||
+    process.env.GMAIL_USER ||
+    process.env.BREVO_USER ||
+    process.env.BREVO_SMTP_LOGIN;
+
+  await sendEmail({
+    from: fromEmail,
     to: normalizedEmail,
     subject: "Your Vornix OTP Code",
     text: `Your OTP code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
