@@ -1,23 +1,27 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
+  host: process.env.BREVO_HOST,
+  port: Number(process.env.BREVO_PORT ?? 587),
   secure: false,
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
+    user: process.env.BREVO_USER,
+    pass: process.env.BREVO_PASS,
   },
 });
 
-export async function sendEmail({ to, subject, html }) {
-  return transporter.sendMail({
-    from: `"Vornix Funding" <${process.env.GMAIL_USER}>`,
-    to,
-    subject,
-    html,
-  });
+export async function sendEmail(to, subject, html) {
+  try {
+    await transporter.sendMail({
+      from: process.env.OTP_FROM_EMAIL,
+      to,
+      subject,
+      html,
+    });
+
+    return { success: true };
+  } catch (err) {
+    console.error("Email send error:", err);
+    return { success: false, error: err.message };
+  }
 }
