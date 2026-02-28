@@ -1,20 +1,9 @@
-import { Router } from "express";
-import {
-  forgotPassword,
-  login,
-  register,
-  resetPassword,
-  sendOtp,
-  verify,
-} from "../controllers/authController.js";
+import express from "express";
+import authMiddleware from "../middleware/authMiddleware.js";
+import { upsertProfile } from "../controllers/authController.js";
 
-const router = Router();
+const router = express.Router();
 
-router.post("/auth/register", register);
-router.post("/auth/login", login);
-router.post("/auth/send-otp", sendOtp);
-router.post("/auth/verify-otp", verify);
-router.post("/auth/forgot-password", forgotPassword);
-router.post("/auth/reset-password", resetPassword);
+router.post("/profile", authMiddleware, upsertProfile);
 
 export default router;

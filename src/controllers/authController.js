@@ -1,4 +1,10 @@
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import supabase from "../config/supabase.js";
+import { generateOTP, verifyOTP } from "../services/otpService.js";
+
+const USERS_TABLE = "users";
+const SALT_ROUNDS = 10;
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 
