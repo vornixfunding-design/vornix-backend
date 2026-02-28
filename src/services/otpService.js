@@ -1,45 +1,51 @@
-import supabase from "../config/supabase.js";
-import { sendEmail } from "../utils/email.js";
+// src/services/otpService.js
+import nodemailer from "nodemailer";
+import { supabase } from "../config/supabase.js";
 
-export async function generateAndSendOTP(email) {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+export function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+}
 
-  // Store OTP
-  await supabase.from("otp_codes").insert({
-    email: email.toLowerCase(),
-    otp,
-    expires_at,
+export async function sendOTPEmail(email, otp) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.BREVO_HOST,
+    port: Number(process.env.BREVO_PORT),
+    secure: false,
+    auth: {
+      user: process.env.BREVO_USERNAME,
+      pass: process.env.BREVO_PASSWORD,
+    },
   });
 
-  // Send OTP via email
-  const html = `
-    <p>Your Vornix verification code:</p>
-    <h2 style="font-size: 28px;">${otp}</h2>
-    <p>This code will expire in 10 minutes.</p>
-  `;
+  const mailData = {
+    from: process.env.BREVO_FROM_EMAIL,
+    to: email,
+    subject: "Your Vornix OTP Code",
+    text: `Your OTP is: ${otp}`,
+    html: `<p>Your OTP code is:</p><h2>${otp}</h2>`,
+  };
 
-  const result = await sendEmail(email, "Your Vornix OTP Code", html);
+  return transporter.sendMail(mailData);
+}
 
-  if (!result.success) throw new Error("Failed to send OTP");
-  return true;
+export async function saveOTP(email, otp) {
+  await supabase.from("auth_otp").insert({
+    email,
+    otp,
+    created_at: new Date().toISOString(),
+  });
 }
 
 export async function verifyOTP(email, otp) {
-  const now = new Date().toISOString();
-
-  const { data } = await supabase
-    .from("otp_codes")
+  const { data, error } = await supabase
+    .from("auth_otp")
     .select("*")
-    .eq("email", email.toLowerCase())
+    .eq("email", email)
     .eq("otp", otp)
-    .gt("expires_at", now)
-    .maybeSingle();
+    .order("created_at", { ascending: false })
+    .limit(1);
 
-  if (!data) return false;
-
-  // Delete OTP after use
-  await supabase.from("otp_codes").delete().eq("id", data.id);
+  if (error || data.length === 0) return false;
 
   return true;
 }
