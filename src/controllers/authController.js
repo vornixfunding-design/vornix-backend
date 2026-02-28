@@ -192,11 +192,14 @@ export async function resetPassword(req, res) {
 
 export async function upsertProfile(req, res) {
   try {
+    const userId = req.user?.id;
+    const fullName = req.body?.full_name;
+
     const { data: profile, error } = await supabase
       .from("profiles")
       .upsert({
-        id: req.user.id,
-        full_name: req.body.full_name,
+        id: userId,
+        full_name: fullName,
         updated_at: new Date(),
       })
       .select()
