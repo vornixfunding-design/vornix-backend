@@ -1,11 +1,18 @@
-import { Router } from 'express';
-import { getCurrentUser, login, register } from '../controllers/authController.js';
-import { verifyToken } from '../middleware/authMiddleware.js';
+import { Router } from "express";
+import {
+  loginController,
+  registerController,
+  sendOtpController,
+  forgotPasswordController,
+  resetPasswordController,
+} from "../controllers/authController.js";
 
 const router = Router();
 
-router.post('/register', register);
-router.post('/login', login);
-router.get('/me', verifyToken, getCurrentUser);
+router.post("/otp/send", sendOtpController);
+router.post("/register", registerController);
+router.post("/login", loginController);
+router.post("/forgot-password", forgotPasswordController);
+router.post("/reset-password", resetPasswordController);
 
 export default router;
