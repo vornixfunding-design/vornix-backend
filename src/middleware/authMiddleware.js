@@ -1,6 +1,6 @@
 import supabase from '../config/supabase';
 
-export default async function authMiddleware(req, res, next) {
+export async function authMiddleware(req, res, next) {
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
@@ -10,14 +10,17 @@ export default async function authMiddleware(req, res, next) {
     }
 
     const { data, error } = await supabase.auth.getUser(token);
+    const user = data?.user;
 
-    if (error || !data?.user) {
+    if (error || !user) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    req.user = data.user;
+    req.user = user;
     return next();
   } catch (_error) {
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
+
+export default authMiddleware;
