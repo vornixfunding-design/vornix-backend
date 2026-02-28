@@ -1,30 +1,30 @@
-import { generateOTP, verifyOTP } from '../services/otpService.js';
+import { generateOTP, sendOTPEmail, saveOTP, verifyOTP } from "../services/otpService.js";
 
 export async function sendOTP(req, res) {
-  const { email } = req.body;
-
-  if (!email) return res.status(400).json({ error: 'Email required' });
-
   try {
-    await generateOTP(email);
-    return res.json({ success: true, message: 'OTP sent' });
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    const otp = generateOTP();
+
+    await saveOTP(email, otp);
+    await sendOTPEmail(email, otp);
+
+    res.json({ success: true, message: "OTP sent" });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to send OTP', details: err.message });
+    res.status(500).json({ error: "Failed to send OTP", details: err.message });
   }
 }
 
-export async function verifyOTPController(req, res) {
-  const { email, otp } = req.body;
-
-  if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
-
+export async function checkOTP(req, res) {
   try {
-    const ok = await verifyOTP(email, otp);
+    const { email, otp } = req.body;
 
-    if (!ok) return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    const valid = await verifyOTP(email, otp);
+    if (!valid) return res.status(400).json({ error: "Invalid OTP" });
 
-    return res.json({ success: true, message: 'OTP verified' });
+    res.json({ success: true, message: "OTP verified" });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed OTP verification', details: err.message });
+    res.status(500).json({ error: "Verification failed", details: err.message });
   }
 }
