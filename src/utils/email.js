@@ -47,6 +47,8 @@ const createTransportOptions = () => {
   );
 };
 
+const BREVO_RETRYABLE_ERROR_CODES = ["ETIMEDOUT", "ESOCKET", "ECONNECTION"];
+
 const createTransporter = (options) => nodemailer.createTransport(options || createTransportOptions());
 
 export const transporter = createTransporter();
@@ -58,7 +60,7 @@ export async function sendEmail(mailOptions) {
     const isBrevoTimeout =
       hasBrevoConfig &&
       brevoPort !== 465 &&
-      ["ETIMEDOUT", "ESOCKET", "ECONNECTION"].includes(error?.code);
+      BREVO_RETRYABLE_ERROR_CODES.includes(error?.code);
 
     if (!isBrevoTimeout) {
       throw error;
