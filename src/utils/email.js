@@ -14,11 +14,11 @@ const baseTimeoutOptions = {
   socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 20000),
 };
 
-const createBrevoOptions = ({ port, secure, requireTLS }) => ({
+const createBrevoOptions = ({ port, secure }) => ({
   host: brevoHost,
   port,
   secure,
-  requireTLS,
+  requireTLS: !secure,
   auth: {
     user: brevoUser,
     pass: brevoPass,
@@ -28,11 +28,7 @@ const createBrevoOptions = ({ port, secure, requireTLS }) => ({
 
 const createTransportOptions = () => {
   if (hasBrevoConfig) {
-    return createBrevoOptions({
-      port: brevoPort,
-      secure: brevoPort === 465,
-      requireTLS: brevoPort !== 465,
-    });
+    return createBrevoOptions({ port: brevoPort, secure: brevoPort === 465 });
   }
 
   if (hasGmailConfig) {
@@ -57,43 +53,20 @@ const createTransporter = (options) => nodemailer.createTransport(options || cre
 
 export const transporter = createTransporter();
 
-const getBrevoFallbackAttempts = () => {
-  const fallbackPorts = String(process.env.BREVO_FALLBACK_PORTS || "465,2525")
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value) && value > 0 && value !== brevoPort);
-
-  return fallbackPorts.map((port) => {
-    if (port === 465) {
-      return { port, secure: true, requireTLS: false };
-    }
-
-    return { port, secure: false, requireTLS: false };
-  });
-};
-
 export async function sendEmail(mailOptions) {
   try {
     return await transporter.sendMail(mailOptions);
   } catch (error) {
-    const isBrevoRetryable = hasBrevoConfig && BREVO_RETRYABLE_ERROR_CODES.includes(error?.code);
+    const isBrevoTimeout =
+      hasBrevoConfig &&
+      brevoPort !== 465 &&
+      BREVO_RETRYABLE_ERROR_CODES.includes(error?.code);
 
-    if (!isBrevoRetryable) {
+    if (!isBrevoTimeout) {
       throw error;
     }
 
-    const attempts = getBrevoFallbackAttempts();
-    const attemptErrors = [error.message];
-
-    for (const attempt of attempts) {
-      try {
-        const retryTransporter = createTransporter(createBrevoOptions(attempt));
-        return await retryTransporter.sendMail(mailOptions);
-      } catch (retryError) {
-        attemptErrors.push(retryError.message);
-      }
-    }
-
-    throw new Error(`Email delivery failed after retries: ${attemptErrors.join(" | ")}`);
+    const fallbackTransporter = createTransporter(createBrevoOptions({ port: 465, secure: true }));
+    return fallbackTransporter.sendMail(mailOptions);
   }
 }
