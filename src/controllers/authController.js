@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import supabase from "../config/supabase.js";
+import supabase from "../config/supabase";
 import { generateOTP, verifyOTP } from "../services/otpService.js";
 
 const USERS_TABLE = "users";
@@ -187,5 +187,27 @@ export async function resetPassword(req, res) {
     return res.status(200).json({ success: true, message: "Password reset successful" });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Reset password failed" });
+  }
+}
+
+export async function upsertProfile(req, res) {
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .upsert({
+        id: req.user.id,
+        full_name: req.body.full_name,
+        updated_at: new Date(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json(profile);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
 }
