@@ -1,36 +1,23 @@
-import jwt from 'jsonwebtoken';
+import supabase from '../config/supabase';
 
-const getTokenFromHeader = (authHeader = '') => {
-  const [scheme, token] = authHeader.split(' ');
-
-  if (scheme !== 'Bearer' || !token) {
-    return null;
-  }
-
-  return token;
-};
-
-export const verifyToken = (req, res, next) => {
-  const secret = process.env.JWT_SECRET;
-
-  if (!secret) {
-    return res.status(500).json({ error: 'Missing JWT_SECRET environment variable.' });
-  }
-
-  const token = getTokenFromHeader(req.headers.authorization);
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authorization token is required.' });
-  }
-
+export default async function authMiddleware(req, res, next) {
   try {
-    const payload = jwt.verify(token, secret);
-    req.user = payload;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = data.user;
     return next();
   } catch (_error) {
-    return res.status(401).json({ error: 'Invalid or expired token.' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
-};
-
-export default verifyToken;
+}
