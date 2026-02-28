@@ -26,7 +26,7 @@ export async function generateOTP(email) {
   }
 
   await transporter.sendMail({
-    from: process.env.OTP_FROM_EMAIL,
+    from: process.env.OTP_FROM_EMAIL || process.env.GMAIL_USER || process.env.BREVO_USER || process.env.BREVO_SMTP_LOGIN,
     to: normalizedEmail,
     subject: "Your Vornix OTP Code",
     text: `Your OTP code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
