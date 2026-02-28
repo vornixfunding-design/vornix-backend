@@ -1,16 +1,12 @@
-import { Router } from 'express';
-import { getHealth } from '../controllers/healthController.js';
-import ctraderRoutes from './ctraderRoutes.js';
-import authRoutes from './authRoutes.js';
-import planRoutes from './planRoutes.js';
-import otpRoutes from './otpRoutes.js';
+import { Router } from "express";
+import { getHealth } from "../controllers/healthController.js";
+import ctraderRoutes from "./ctraderRoutes.js";
+import planRoutes from "./planRoutes.js";
 
 const router = Router();
 
-router.get('/health', getHealth);
-router.use('/ctrader', ctraderRoutes);
-router.use('/auth', authRoutes);
-router.use('/plans', planRoutes);
-router.use('/otp', otpRoutes);
+router.get("/health", getHealth);
+router.use("/ctrader", ctraderRoutes);
+router.use("/plans", planRoutes);
 
 export default router;
