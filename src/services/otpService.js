@@ -1,42 +1,45 @@
-import supabase from '../config/supabase.js';
-import { sendEmail } from '../utils/email.js';
+import supabase from "../config/supabase.js";
+import { sendEmail } from "../utils/email.js";
 
-export async function generateOTP(email) {
+export async function generateAndSendOTP(email) {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-  const { error } = await supabase.from('otps').insert({
-    email,
+  // Store OTP
+  await supabase.from("otp_codes").insert({
+    email: email.toLowerCase(),
     otp,
     expires_at,
   });
 
-  if (error) throw error;
+  // Send OTP via email
+  const html = `
+    <p>Your Vornix verification code:</p>
+    <h2 style="font-size: 28px;">${otp}</h2>
+    <p>This code will expire in 10 minutes.</p>
+  `;
 
-  await sendEmail({
-    to: email,
-    subject: 'Your Vornix OTP Code',
-    html: `<h2>Your OTP: ${otp}</h2><p>This code expires in 5 minutes.</p>`,
-  });
+  const result = await sendEmail(email, "Your Vornix OTP Code", html);
 
+  if (!result.success) throw new Error("Failed to send OTP");
   return true;
 }
 
 export async function verifyOTP(email, otp) {
-  const { data, error } = await supabase
-    .from('otps')
-    .select('*')
-    .eq('email', email)
-    .eq('otp', otp)
+  const now = new Date().toISOString();
+
+  const { data } = await supabase
+    .from("otp_codes")
+    .select("*")
+    .eq("email", email.toLowerCase())
+    .eq("otp", otp)
+    .gt("expires_at", now)
     .maybeSingle();
 
-  if (error) throw error;
   if (!data) return false;
 
-  const isExpired = new Date(data.expires_at) < new Date();
-  if (isExpired) return false;
-
-  await supabase.from('otps').delete().eq('email', email);
+  // Delete OTP after use
+  await supabase.from("otp_codes").delete().eq("id", data.id);
 
   return true;
 }
