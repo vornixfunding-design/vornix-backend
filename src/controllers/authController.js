@@ -26,9 +26,7 @@ export async function register(req, res) {
       .eq('email', email)
       .maybeSingle();
 
-    if (userLookupError) {
-      return res.status(500).json({ error: 'Failed to check existing user' });
-    }
+    if (userLookupError) throw userLookupError;
 
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
@@ -47,9 +45,8 @@ export async function register(req, res) {
       .select('id, email, full_name, is_verified')
       .single();
 
-    if (userInsertError || !user) {
-      return res.status(500).json({ error: 'Failed to create user' });
-    }
+    if (userInsertError) throw userInsertError;
+    if (!user) throw new Error('User creation returned no data');
 
     const otp = generateOtp();
     const expires_at = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
@@ -61,15 +58,14 @@ export async function register(req, res) {
       used: false,
     });
 
-    if (otpInsertError) {
-      return res.status(500).json({ error: 'Failed to save OTP' });
-    }
+    if (otpInsertError) throw otpInsertError;
 
     await sendOtpEmail(email, otp);
 
     return res.status(200).json({ message: 'OTP sent', email });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to register user' });
+    console.error('Registration error:', error);
+    return res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
 }
 
