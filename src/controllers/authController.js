@@ -1,220 +1,190 @@
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import supabase from '../config/supabase.js';
-import { sendOtpEmail } from '../services/emailService.js';
-
-const JWT_SECRET = process.env.JWT_SECRET;
-const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES || '10');
+const supabase = require('../config/supabase');
+const { sendOtpEmail } = require('../services/emailService');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export async function register(req, res) {
+// Register: create user, send OTP
+exports.register = async (req, res) => {
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const password = String(req.body?.password || '');
-    const full_name = String(req.body?.full_name || '').trim();
-
+    const { email, password, full_name } = req.body;
     if (!email || !password || !full_name) {
-      return res.status(400).json({ error: 'Email, password, and full_name are required' });
+      return res.status(400).json({ error: 'All fields required' });
     }
 
-    const { data: existingUser, error: userLookupError } = await supabase
+    // Check if user exists
+    const { data: existingUser } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)
       .maybeSingle();
 
-    if (userLookupError) throw userLookupError;
-
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const { data: user, error: userInsertError } = await supabase
+    // Insert user
+    const { data: newUser, error: insertError } = await supabase
       .from('users')
-      .insert({
-        email,
-        password: passwordHash,
-        full_name,
-        is_verified: false,
-      })
-      .select('id, email, full_name, is_verified')
+      .insert([
+        {
+          email,
+          password: hashedPassword,
+          full_name,
+          is_verified: false,
+        },
+      ])
+      .select()
       .single();
 
-    if (userInsertError) throw userInsertError;
-    if (!user) throw new Error('User creation returned no data');
+    if (insertError) throw insertError;
 
+    // Generate and store OTP
     const otp = generateOtp();
-    const expires_at = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES) * 60 * 1000);
 
-    const { error: otpInsertError } = await supabase.from('otps').insert({
-      email,
-      otp,
-      expires_at,
-      used: false,
-    });
+    const { error: otpError } = await supabase
+      .from('otps')
+      .insert([{ email, otp, expires_at: expiresAt }]);
 
-    if (otpInsertError) throw otpInsertError;
+    if (otpError) throw otpError;
 
+    // Send OTP email
     await sendOtpEmail(email, otp);
 
-    return res.status(200).json({ message: 'OTP sent', email });
-  } catch (error) {
-    console.error('Registration error:', error);
-    return res.status(500).json({ error: 'Registration failed. Please try again.' });
+    res.status(200).json({ message: 'OTP sent', email });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Registration failed' });
   }
-}
+};
 
-export async function verifyOtp(req, res) {
+// Verify OTP
+exports.verifyOtp = async (req, res) => {
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const otp = String(req.body?.otp || '').trim();
-
+    const { email, otp } = req.body;
     if (!email || !otp) {
-      return res.status(400).json({ error: 'Email and OTP are required' });
+      return res.status(400).json({ error: 'Email and OTP required' });
     }
 
-    const now = new Date().toISOString();
-    const { data: otpData, error: otpLookupError } = await supabase
+    // Find valid OTP
+    const { data: otpRecord, error: fetchError } = await supabase
       .from('otps')
-      .select('id, email')
+      .select('*')
       .eq('email', email)
       .eq('otp', otp)
       .eq('used', false)
-      .gt('expires_at', now)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .gt('expires_at', new Date().toISOString())
       .maybeSingle();
 
-    if (otpLookupError || !otpData) {
+    if (fetchError) throw fetchError;
+    if (!otpRecord) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
 
-    const { error: otpUpdateError } = await supabase
-      .from('otps')
-      .update({ used: true })
-      .eq('id', otpData.id);
+    // Mark OTP as used
+    await supabase.from('otps').update({ used: true }).eq('id', otpRecord.id);
 
-    if (otpUpdateError) {
-      return res.status(500).json({ error: 'Failed to update OTP status' });
-    }
-
-    const { error: userVerifyError } = await supabase
+    // Update user as verified
+    const { data: user, error: updateError } = await supabase
       .from('users')
       .update({ is_verified: true })
-      .eq('email', email);
-
-    if (userVerifyError) {
-      return res.status(500).json({ error: 'Failed to verify user' });
-    }
-
-    const { data: user, error: userFetchError } = await supabase
-      .from('users')
-      .select('id, email, full_name, is_verified')
       .eq('email', email)
-      .maybeSingle();
+      .select()
+      .single();
 
-    if (userFetchError || !user) {
-      return res.status(500).json({ error: 'Failed to fetch user' });
-    }
+    if (updateError) throw updateError;
 
+    // Generate JWT
     const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' },
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
-    return res.status(200).json({ token, user });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to verify OTP' });
+    res.json({ token, user });
+  } catch (err) {
+    console.error('OTP verification error:', err);
+    res.status(500).json({ error: 'Verification failed' });
   }
-}
+};
 
-export async function login(req, res) {
+// Login
+exports.login = async (req, res) => {
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const password = String(req.body?.password || '');
-
+    const { email, password } = req.body;
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      return res.status(400).json({ error: 'Email and password required' });
     }
 
-    const { data: user, error: userFetchError } = await supabase
+    // Find user
+    const { data: user, error: fetchError } = await supabase
       .from('users')
-      .select('id, email, full_name, is_verified, password')
+      .select('*')
       .eq('email', email)
       .maybeSingle();
 
-    if (userFetchError) {
-      return res.status(500).json({ error: 'Failed to fetch user' });
-    }
-
+    if (fetchError) throw fetchError;
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if verified
     if (!user.is_verified) {
       return res.status(403).json({ error: 'Email not verified' });
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.password || '');
-
-    if (!passwordMatches) {
+    // Compare password
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Generate JWT
     const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' },
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
-    const { password: _password, ...safeUser } = user;
-
-    return res.status(200).json({ token, user: safeUser });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to login' });
+    res.json({ token, user });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
   }
-}
+};
 
-export async function resendOtp(req, res) {
+// Resend OTP
+exports.resendOtp = async (req, res) => {
   try {
-    const email = String(req.body?.email || '').trim().toLowerCase();
-
+    const { email } = req.body;
     if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
+      return res.status(400).json({ error: 'Email required' });
     }
 
-    await supabase.from('otps').update({ used: true }).eq('email', email).eq('used', false);
-
+    // Generate new OTP
     const otp = generateOtp();
-    const expires_at = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES) * 60 * 1000);
 
-    const { error: otpInsertError } = await supabase.from('otps').insert({
-      email,
-      otp,
-      expires_at,
-      used: false,
-    });
+    // Store new OTP
+    const { error: otpError } = await supabase
+      .from('otps')
+      .insert([{ email, otp, expires_at: expiresAt }]);
 
-    if (otpInsertError) {
-      return res.status(500).json({ error: 'Failed to save OTP' });
-    }
+    if (otpError) throw otpError;
 
+    // Send email
     await sendOtpEmail(email, otp);
 
-    return res.status(200).json({ message: 'OTP resent' });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Failed to resend OTP' });
+    res.json({ message: 'OTP resent' });
+  } catch (err) {
+    console.error('Resend OTP error:', err);
+    res.status(500).json({ error: 'Failed to resend OTP' });
   }
-}
+};
