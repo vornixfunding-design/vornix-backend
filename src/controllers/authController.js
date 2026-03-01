@@ -32,13 +32,13 @@ export async function register(req, res) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    const password_hash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const { data: user, error: userInsertError } = await supabase
       .from('users')
       .insert({
         email,
-        password_hash,
+        password: passwordHash,
         full_name,
         is_verified: false,
       })
@@ -148,7 +148,7 @@ export async function login(req, res) {
 
     const { data: user, error: userFetchError } = await supabase
       .from('users')
-      .select('id, email, full_name, is_verified, password_hash')
+      .select('id, email, full_name, is_verified, password')
       .eq('email', email)
       .maybeSingle();
 
@@ -164,7 +164,7 @@ export async function login(req, res) {
       return res.status(403).json({ error: 'Email not verified' });
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.password_hash || '');
+    const passwordMatches = await bcrypt.compare(password, user.password || '');
 
     if (!passwordMatches) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -179,7 +179,7 @@ export async function login(req, res) {
       { expiresIn: '7d' },
     );
 
-    const { password_hash: _passwordHash, ...safeUser } = user;
+    const { password: _password, ...safeUser } = user;
 
     return res.status(200).json({ token, user: safeUser });
   } catch (error) {
