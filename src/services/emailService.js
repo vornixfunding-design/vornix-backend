@@ -1,16 +1,16 @@
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
-  secure: false, // true for 465, false for 587
+  secure: false,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
-async function sendOtpEmail(email, otp) {
+export async function sendOtpEmail(email, otp) {
   const mailOptions = {
     from: `"Vornix" <${process.env.SMTP_USER}>`,
     to: email,
@@ -18,8 +18,5 @@ async function sendOtpEmail(email, otp) {
     text: `Your OTP code is: ${otp}. It expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.`,
     html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>It expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.</p>`,
   };
-
   await transporter.sendMail(mailOptions);
 }
-
-module.exports = { sendOtpEmail };
