@@ -1,25 +1,25 @@
-import supabase from '../config/supabase.js';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.AUTH_JWT_SECRET || 'dev-auth-secret';
 
 export async function authMiddleware(req, res, next) {
   try {
     const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const { data, error } = await supabase.auth.getUser(token);
-    const user = data?.user;
+    const payload = jwt.verify(token, JWT_SECRET);
 
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
+    req.user = {
+      email: payload.email,
+    };
 
-    req.user = user;
     return next();
   } catch (_error) {
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
 
