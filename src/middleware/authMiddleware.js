@@ -5,7 +5,7 @@ export default function authMiddleware(req, res, next) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'No token provided' });
   }
 
   try {
