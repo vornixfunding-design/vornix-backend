@@ -1,35 +1,25 @@
-import nodemailer from 'nodemailer';
-
-const {
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_USER,
-  SMTP_PASS,
-  EMAIL_FROM,
-  OTP_EXPIRY_MINUTES = '10',
-} = process.env;
+const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: Number(SMTP_PORT),
-  secure: false,
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: false, // true for 465, false for 587
   auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
 });
 
-export async function sendOtpEmail(email, otp) {
-  const expiryMinutes = Number(OTP_EXPIRY_MINUTES);
-
-  await transporter.sendMail({
-    from: EMAIL_FROM || SMTP_USER,
+async function sendOtpEmail(email, otp) {
+  const mailOptions = {
+    from: `"Vornix" <${process.env.SMTP_USER}>`,
     to: email,
     subject: 'Your Vornix OTP Code',
-    text: `Your OTP code is ${otp}. It will expire in ${expiryMinutes} minutes.`,
-  });
+    text: `Your OTP code is: ${otp}. It expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.`,
+    html: `<p>Your OTP code is: <strong>${otp}</strong></p><p>It expires in ${process.env.OTP_EXPIRY_MINUTES} minutes.</p>`,
+  };
+
+  await transporter.sendMail(mailOptions);
 }
 
-export default {
-  sendOtpEmail,
-};
+module.exports = { sendOtpEmail };
