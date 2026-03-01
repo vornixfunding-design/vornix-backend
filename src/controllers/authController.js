@@ -67,7 +67,7 @@ export async function register(req, res) {
 
     await sendOtpEmail(email, otp);
 
-    return res.status(200).json({ message: 'OTP sent to email', email });
+    return res.status(200).json({ message: 'OTP sent', email });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Failed to register user' });
   }
@@ -222,5 +222,3 @@ export async function resendOtp(req, res) {
     return res.status(500).json({ error: error.message || 'Failed to resend OTP' });
   }
 }
-
-export { generateOtp };
